@@ -4,27 +4,15 @@ pragma solidity >=0.4.21 <0.7.0;
 
 contract WhatIs {
 
-  address public owner;
+  // **OBJECTS**
 
-  // Create a counter for the number of unique Whats
-  uint public whatCount;
-  uint public maxEntryBytes = 10;
-
-  // Create a mapping from uint id to What
-  // mapping (uint => What) public whats;
-
-  // Create a mapping for each What
-  // mapping (uint => WhatContent) public whatContents;
-
-  // Define the state a What can be in
-  enum State{Open, Voting, Proposed, Accepted, Rejected}
-
-  // Define a what
+  // Define What struct
   struct What { 
     string name;
     State state;
   }
 
+  // Define Entry struct
   struct Entry { 
     string what;
     string content;
@@ -33,11 +21,24 @@ contract WhatIs {
     uint proposedTimestamp;
   }
   
+  // Create a counter for the number of unique Whats
+  uint public whatCount;
+  // Define the states Whats and Entries can be in
+  enum State{Open, Voting, Proposed, Accepted, Rejected}
+
+  // **SETTINGS**
+
+  // Define max number of bytes for an Entry
+  uint public maxEntryBytes = 10;
+  // Define the minimum vote duration before an entry can be rejected
+  uint public voteDuration = 86400;
+  
+  // **MAPPINGS**
 
   // Create a bidirectional mapping between whats and ids
   mapping (uint => What) public whats;
   mapping (string => uint) public ids;
-  // Create entry mappings
+  // Create entry mappings and counts
   mapping(uint => mapping(uint => Entry)) public proposedEntries;
   mapping(uint => mapping(uint => Entry)) public acceptedEntries;
   mapping(uint => uint) public proposedEntriesCount;
@@ -49,16 +50,47 @@ contract WhatIs {
   // Creates voted mapping to track who has voted
   mapping(uint => mapping(uint => mapping(address => bool))) public voted;
 
-  // <LogCreated event: id, name, content>
-  event LogWhatCreated(uint id, string name, string entry);
+  // **EVENTS**
 
-  // <LogFetched event: name, id>
-  event LogFetched(string name, uint id);
+  event LogWhatCreated(
+    uint id, 
+    string name, 
+    string entry, 
+    address creator,
+    uint createdTimestamp
+    );
 
-  // modifier doesExist (string what) { 
-  //   // check that what is already in the array of defined objects
-  // }
+  event LogEntryProposed(
+    uint what_id, 
+    uint proposed_entry_id, 
+    string name, 
+    string entry, 
+    address proposer, 
+    uint proposedTimestamp
+    );
 
+  event LogVoted(
+    uint what_id, 
+    uint proposed_entry_id, 
+    string name, 
+    address voter, 
+    uint votedTimestamp,
+    bool pivotal
+    );
+
+  event LogEntryAccepted(
+    uint what_id, 
+    uint proposed_entry_id,
+    uint accepted_entry_id,
+    string name, 
+    string content,
+    address proposer,
+    uint votesRequired,
+    uint votesReceived,
+    uint acceptedTimestamp
+    );
+
+  // **MODIFIERS**
   modifier doesNotExist (string memory _name) { 
     // check that What is not already in the mapping
     require(ids[_name] == 0);
@@ -66,47 +98,52 @@ contract WhatIs {
   }
 
   modifier doesExist (string memory _name) { 
-    // check that What is not already in the mapping
+    // check that What is already in the mapping
     require(ids[_name] != 0);
     _;
   }
 
   modifier meetsLengthLimits (string memory _entry) { 
-    // check that What is not already in the mapping
+    // check that an entry isn't too long
     require(bytes(_entry).length <= maxEntryBytes);
     _;
   }
 
   modifier isOpen (string memory _name) { 
-    // check that What is open
+    // check that What is in an open state
     require(whats[getWhatID(_name)].state == State.Open);
     _;
   }
 
   modifier isVoting (string memory _name) { 
-    // check that What is in voting
+    // check that What is a voting state
     require(whats[getWhatID(_name)].state == State.Voting);
     _;
   }
 
   modifier isOwner (string memory _name) { 
-    // check that a sender is an owner, i.e. entitled to vote
+    // check that a sender is an owner of the What, i.e. entitled to vote
     require(ownership[getWhatID(_name)][msg.sender] > 0);
     _;
   }
 
   modifier hasNotAlreadyVoted (string memory _name) { 
-    // check that a sender is an owner, i.e. entitled to vote
+    // check that a voter has not already voted on an entry
     require(voted[getWhatID(_name)][proposedEntriesCount[getWhatID(_name)]][msg.sender] == false);
     _;
   }
 
   modifier isExpired (string memory _name) { 
-    // check that a sender is an owner, i.e. entitled to vote
+    // check whether a vote has already been active for a day
     uint id = getWhatID(_name);
-    require(now > proposedEntries[id][proposedEntriesCount[id]].proposedTimestamp + 86400);
+    require(now >= proposedEntries[id][proposedEntriesCount[id]].proposedTimestamp + voteDuration);
     _;
   }
+
+  // **CONSTRUCTOR**
+
+  // Define the owner
+  address public owner;
 
   constructor() public {
     // 1. Set the owner to the transaction sender
@@ -114,6 +151,8 @@ contract WhatIs {
     // 2. Initialize the sku count to 0.
     whatCount = 0;
   }
+
+  // **FUNCTIONS**
 
   function createWhat(string memory _name, string memory _entry) 
     public 
@@ -145,31 +184,27 @@ contract WhatIs {
     // 3. Advance the whatCount
     whatCount += 1;
     // 4. Emit the event
-    emit LogWhatCreated(ids[_name],_name, _entry);
+    emit LogWhatCreated(ids[_name],_name, _entry, msg.sender, now);
     // 5. Return true
     return true;
     }
 
   function getWhatID(string memory _name)
-    public returns (uint)
+    public 
+    doesExist(_name)
+    returns (uint)
     {
       return ids[_name];
     }
 
   function getWhatCount()
-    public returns (uint)
+    public 
+    returns (uint)
     {
       return whatCount;
     }
 
-  function advanceWhatCount()
-    public returns (uint)
-    {
-      whatCount += 1;
-      return whatCount;
-    }
-
-   function proposeEntry(string memory _name, string memory _entry)
+  function proposeEntry(string memory _name, string memory _entry)
     public
     doesExist(_name)
     isOpen(_name)
@@ -186,10 +221,11 @@ contract WhatIs {
       });
       proposedEntriesCount[id] += 1;
       whats[id].state = State.Voting;
+      emit LogEntryProposed(id,proposedEntriesCount[id], _name, _entry, msg.sender, now);
       return true;
     }
 
-   function vote(string memory _name)
+  function vote(string memory _name)
     public
     doesExist(_name)
     isVoting(_name)
@@ -200,8 +236,14 @@ contract WhatIs {
       uint id = getWhatID(_name);
       voted[id][proposedEntriesCount[id]][msg.sender]=true;
       votes[id] += ownership[id][msg.sender];
-      // If that vote is pivotal, we terminate the vote and accept the entry
+      // Check if the vote was pivotal
+      bool pivotal = false;
       if (votes[id] > acceptedEntriesCount[id]/2) {
+        pivotal = true;
+      }
+      emit LogVoted(ids[_name],proposedEntriesCount[id],_name, msg.sender, now, pivotal);
+      // If that vote is pivotal, we terminate the vote and accept the entry
+      if (pivotal == true) {
         // Accept the entry
         proposedEntries[id][proposedEntriesCount[id]].state = State.Accepted;
         acceptedEntries[id][acceptedEntriesCount[id]+1] = proposedEntries[id][proposedEntriesCount[id]];
@@ -210,16 +252,28 @@ contract WhatIs {
         whats[id].state = State.Open;
         // Credit the proposer with an ownership token
         ownership[id][proposedEntries[id][proposedEntriesCount[id]].proposer] += 1;
+        pivotal = true;
+        emit LogEntryAccepted(id,proposedEntriesCount[id],acceptedEntriesCount[id],
+         _name, acceptedEntries[id][acceptedEntriesCount[id]].content, 
+         acceptedEntries[id][acceptedEntriesCount[id]].proposer,
+         (acceptedEntriesCount[id]-1)/2, votes[id], now);
+        votes[id] = 0;
       }
+      return true;
     }
 
-   function currentTime() public returns (uint256){
-        return now;
+  function getCurrentTime() 
+    public 
+    returns (uint256)
+    {
+      return now;
     }
 
-   function endVote(string memory _name)
+  function rejectEntry(string memory _name)
     public 
     isExpired(_name)
+    doesExist(_name)
+    isVoting(_name)
     returns (bool)
     {
       uint id = getWhatID(_name);

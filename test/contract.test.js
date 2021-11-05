@@ -1,14 +1,12 @@
-let BN = web3.utils.BN;
 let WhatIs = artifacts.require("WhatIs");
-let { catchRevert } = require("./exceptionsHelpers.js");
-const { items: WhatStruct, isDefined, isPayable, isType } = require("./ast-helper");
-const { catchInvalidParams } = require("./exceptionsHelpers.js");
+let { catchRevert } = require("./exceptionsHelpers");
+const { whatStruct, entryStruct, isDefined, isPayable, isType } = require("./astHelper");
+const timeHelpers = require("./timeHelpers");
 
 contract("WhatIs", function (accounts) {
   const [_owner, alice, bob] = accounts;
   const name = "name";
   const content = "content";
-  let instance;
 
   beforeEach(async () => {
     instance = await WhatIs.new();
@@ -37,24 +35,37 @@ contract("WhatIs", function (accounts) {
         assert(enumState.hasOwnProperty('Voting'),"The enum does not have a `Voting` value");
     });
 
-    let subjectStruct;
+    let subjectStruct1;
+    let subjectStruct2;
     before(() => {
-      subjectStruct = WhatStruct(WhatIs);
+      subjectStruct1 = whatStruct(WhatIs);
+      subjectStruct2 = entryStruct(WhatIs);
       assert(
-        subjectStruct !== null, 
-        "The contract should define a `What Struct`"
+        subjectStruct1 !== null && subjectStruct2 !== null, 
+        "The contract should define a `What struct` and a `Entry struct`"
       );
     });
     
-    it("have a What struct with all the right members", async () => {
-        assert(isDefined(subjectStruct)("name"), "Struct What should have a `name` member");
-        assert(isType(subjectStruct)("name")("string"), "`name` should be of type `string`");
-        assert(isDefined(subjectStruct)("state"), "Struct What should have a `state` member");
-        assert(isType(subjectStruct)("state")("State"), "`state` should be of type `State`");
+    it("have a What struct with the right members", async () => {
+        assert(isDefined(subjectStruct1)("name"), "Struct What should have a `name` member");
+        assert(isType(subjectStruct1)("name")("string"), "`name` should be of type `string`");
+        assert(isDefined(subjectStruct1)("state"), "Struct What should have a `state` member");
+        assert(isType(subjectStruct1)("state")("State"), "`state` should be of type `State`");
     });
 
-    // Not sure how to write a test on whether the required mappings whats and ids exist
-    // Probably not necessary as we'll check in later tests that they work
+    it("have an Entry struct with the right members", async () => {
+      assert(isDefined(subjectStruct2)("what"), "Struct Entry should have a `what` member");
+      assert(isType(subjectStruct2)("what")("string"), "`what` should be of type `string`");
+      assert(isDefined(subjectStruct2)("content"), "Struct Entry should have a `content` member");
+      assert(isType(subjectStruct2)("content")("string"), "`content` should be of type `string`");
+      assert(isDefined(subjectStruct2)("state"), "Struct Entry should have a `state` member");
+      assert(isType(subjectStruct2)("state")("State"), "`state` should be of type `State`");
+      assert(isDefined(subjectStruct2)("proposer"), "Struct Entry should have a `proposer` member");
+      assert(isType(subjectStruct2)("proposer")("address"), "`proposer` should be of type `address`");
+      assert(isDefined(subjectStruct2)("proposedTimestamp"), "Struct Entry should have a `proposedTimestamp` member");
+      assert(isType(subjectStruct2)("proposedTimestamp")("uint"), "`proposedTimestamp` should be of type `uint`");
+  });
+
   });
 
   describe("When createWhat is called, it should", () => {
@@ -130,6 +141,13 @@ contract("WhatIs", function (accounts) {
       test_entry = await instance.proposedEntries.call(1,2);
       assert(test_entry.content == 'a');
     });
+    it("emit a LogEntryProposed event", async () => {
+      let eventEmitted = false;
+      await instance.createWhat(name, content, { from: alice });
+      const tx = await instance.proposeEntry(name, content, { from: bob });
+      if (tx.logs[0].event == "LogEntryProposed") {eventEmitted = true;}
+      assert.equal(eventEmitted,true,"proposing an entry should emit a LogEntryProposed event")
+    });
 
   });
 
@@ -162,11 +180,57 @@ contract("WhatIs", function (accounts) {
       await instance.createWhat(name,content, { from: alice });
       await instance.proposeEntry(name,'a', { from: alice });
       await instance.vote(name, { from: alice });
+      // accepts, resetting votes to zero
+      await instance.proposeEntry(name,'a', { from: bob });
+      await instance.vote(name, { from: alice });
+      // accepts, resetting votes to zero
+      await instance.proposeEntry(name,'a', { from: alice });
+      await instance.vote(name, { from: bob });
+      // assigns a vote but doesn't accept yet as 1/3
       assert(await instance.votes.call(1) == 1);
+    });
+    it("emit a LogVoted event", async () => {
+      let eventEmitted = false;
+      await instance.createWhat(name, content, { from: alice });
+      await instance.proposeEntry(name, content, { from: bob });
+      const tx = await instance.vote(name, { from: alice });
+      if (tx.logs[0].event == "LogVoted") {eventEmitted = true;}
+      assert.equal(eventEmitted,true,"voting should emit a LogVoted event")
     });
 
   });
 
+  describe("When rejectEntry is called, it should", () => {
+    it("error when What doesn't exist", async () => {
+      await catchRevert(instance.rejectEntry(name,{ from: bob }));
+    });
+    it("error when What is in State.Open", async () => {
+      await instance.createWhat(name,content, { from: alice });
+      await catchRevert(instance.rejectEntry(name, { from: alice}));
+    });
+    it("error when the entry/vote has not yet expired", async () => {
+      await instance.createWhat(name,content, { from: alice });
+      await instance.proposeEntry(name,content, { from: bob });
+      await catchRevert(instance.rejectEntry(name, { from: alice}));
+    });
+    it("update the Entry's state to Rejected", async () => {
+      await instance.createWhat(name,content, { from: alice });
+      await instance.proposeEntry(name,'a', { from: bob });
+      const voteDurationBN = await instance.voteDuration.call();
+      await timeHelpers.advanceTimeAndBlock(voteDurationBN.toNumber());
+      await instance.rejectEntry(name, { from: alice });
+      test_entry = await instance.proposedEntries.call(1,2);
+      assert(test_entry['state'] == WhatIs.State.Rejected);
+    });
+    // it("update the What's state to Open", async () => {
+    //   await instance.createWhat(name,content, { from: alice });
+    //   await instance.proposeEntry(name,'a', { from: alice });
+    //   await instance.vote(name, { from: alice });
+    //   assert(await instance.voted.call(1,2,alice) == true);
+    // });
+    
+
+  });
 
 
 });
