@@ -1,20 +1,34 @@
 
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.0;
+
+/// @title WhatIs: Community Content Development
+/// @author Shane Auerbach
+/// @notice This was an educational exercise. Do not use this contract beyond testing/exposition.
+/// @dev This contract has many design flaws and no gas optimization.
+
+/// @notice We import Ownable for general admin tooling/functions
 import "@openzeppelin/contracts/access/Ownable.sol";
+
+/// @notice We import Pausable so that the contract can be paused
 import "@openzeppelin/contracts/security/Pausable.sol";
 
 contract WhatIs is Pausable, Ownable {
 
-  // **OBJECTS**
-
-  // Define What struct
+  /// @dev Creates a structure for each content subject (a "What")
+  /// @param name The name is the subject
+  /// @param state The state records whether it is open to new entries or in a voting phase
   struct What { 
     string name;
     State state;
   }
 
-  // Define Entry struct
+  /// @dev Creates a structure for each content entry (an "Entry")
+  /// @param what The subject/"What" the entry is associated with
+  /// @param content The content a user wants to contribute to that subject
+  /// @param state The state records whether the entry is proposed, accepted, or rejected
+  /// @param proposer The address of the user who proposed the entry
+  /// @param proposedTimestamp A timestamp of when the entry was proposed
   struct Entry { 
     string what;
     string content;
@@ -23,37 +37,49 @@ contract WhatIs is Pausable, Ownable {
     uint proposedTimestamp;
   }
   
-  // Create a counter for the number of unique Whats
+  /// @notice whatCount tracks the number of subjects that have been created
   uint public whatCount;
-  // Define the states Whats and Entries can be in
+
+  /// @dev States for Whats (subjects) and Entrys (contributions) are combined in the same enum.
   enum State{Open, Voting, Proposed, Accepted, Rejected}
 
-  // **SETTINGS**
-
-  // Define max number of bytes for an Entry
+  /// @notice maxEntryBytes defines the max length of an Entry
   uint public maxEntryBytes = 10;
-  // Define the minimum vote duration before an entry can be rejected
-  uint public voteDuration = 86400;
-  
-  // **MAPPINGS**
 
-  // Create a bidirectional mapping between whats and ids
+  /// @notice voteDuration defines the minimum seconds a vote must remain open before the entry can be rejected
+  uint public voteDuration = 86400;
+
+  /// @notice whats and ids are a bidirectional mapping between subjects "whats" and integer ids
   mapping (uint => What) public whats;
   mapping (string => uint) public ids;
-  // Create entry mappings and counts
+
+  /// @notice proposedEntries tracks contributions by their own id and the id of their "what"
   mapping(uint => mapping(uint => Entry)) public proposedEntries;
+
+  /// @notice acceptedEntries tracks contributions by their own id and the id of their "what"
   mapping(uint => mapping(uint => Entry)) public acceptedEntries;
+
+  /// @notice proposedEntriedCount and acceptedEntriesCount count entries for each "what"
   mapping(uint => uint) public proposedEntriesCount;
   mapping(uint => uint) public acceptedEntriesCount;
-  // Create ownership mappings
+
+  /// @notice ownership tracks how many accepted contributions each "what" has from each contributor
   mapping(uint => mapping(address => uint)) public ownership;
-  // Create votes mapping
+
+  /// @notice votes tracks how many votes each active entry has for each what
+  /// @notice each "what" can have at most one entry at a time, and its vote count is reset to zero after each vote
   mapping(uint => uint) public votes;
-  // Creates voted mapping to track who has voted
+
+  /// @notice tracks for each what and entry whether an address has already voted
   mapping(uint => mapping(uint => mapping(address => bool))) public voted;
 
-  // **EVENTS**
-
+  
+  /// @notice LogWhatCreated fires whenever a new subject/"what" is created
+  /// @param id the integer ID of the "what"
+  /// @param name the name of the "what"
+  /// @param entry the first content associated with the what, added at creation
+  /// @param creator the address of the person who created the "what"
+  /// @param createdTimestamp the timestamp when the what was submitted
   event LogWhatCreated(
     uint id, 
     string name, 
@@ -62,6 +88,13 @@ contract WhatIs is Pausable, Ownable {
     uint createdTimestamp
     );
 
+  /// @notice LogEntryProposed fires whenever a new entry is proposed to an existing subject/"What"
+  /// @param what_id the integer ID of the "what"
+  /// @param proposed_entry_id the integer ID of the entry
+  /// @param name the name of the "what"
+  /// @param entry the proposed content as a string
+  /// @param proposer the address of the person who created the entry
+  /// @param proposedTimestamp the timestamp when the entry was proposed
   event LogEntryProposed(
     uint what_id, 
     uint proposed_entry_id, 
@@ -71,6 +104,14 @@ contract WhatIs is Pausable, Ownable {
     uint proposedTimestamp
     );
 
+  /// @notice LogVoted fires whenever a contributor votes on a proposed entry
+  /// @notice You only vote for a proposal, not against. A non-vote is implicitly against
+  /// @param what_id the integer ID of the "what" being voted on
+  /// @param proposed_entry_id the integer ID of the entry being vcted on
+  /// @param name the name of the "what"
+  /// @param voter the address of the user who voted
+  /// @param votedTimestamp the timestamp when the vote was made
+  /// @param pivotal a boolean that's true when a vote passes the threshold for entry acceptance
   event LogVoted(
     uint what_id, 
     uint proposed_entry_id, 
@@ -80,6 +121,17 @@ contract WhatIs is Pausable, Ownable {
     bool pivotal
     );
 
+  /// @notice LogEntryAccepted fires whenever an entry meets the required vote threshold and is accepted
+  /// @notice There is no entry acceptance function. Acceptance is automatic when the vote threshold is met
+  /// @param what_id the integer ID of the "what" being voted on
+  /// @param proposed_entry_id the integer ID of the entry being voted on
+  /// @param accepted_entry_id a new accepted entry integer ID assigned upon acceptance
+  /// @param name the name of the "what"
+  /// @param content the content of the accepted entry
+  /// @param proposer the address of the user who proposed the entry
+  /// @param votesRequired the number of votes required for acceptance
+  /// @param votesReceived the number of votes received
+  /// @param acceptedTimestamp the timestamp when the entry was accepted
   event LogEntryAccepted(
     uint what_id, 
     uint proposed_entry_id,
@@ -92,6 +144,16 @@ contract WhatIs is Pausable, Ownable {
     uint acceptedTimestamp
     );
 
+  /// @notice LogEntryRejected fires whenever an entry is rejected.
+  /// @notice Entry rejection is not automatic. Any user can trigger rejection once the minimum vote duration has passed
+  /// @param what_id the integer ID of the "what" being voted on
+  /// @param proposed_entry_id the integer ID of the entry being voted on
+  /// @param name the name of the "what"
+  /// @param content the content of the accepted entry
+  /// @param proposer the address of the user who proposed the entry
+  /// @param votesRequired the number of votes required for acceptance
+  /// @param votesReceived the number of votes received
+  /// @param rejectedTimestamp the timestamp when the entry was rejected
   event LogEntryRejected(
     uint what_id, 
     uint proposed_entry_id,
@@ -103,69 +165,71 @@ contract WhatIs is Pausable, Ownable {
     uint rejectedTimestamp
     );
 
-  // **MODIFIERS**
+  /// @notice doesNotExists checks that a subject/"what" doesn't already exist
   modifier doesNotExist (string memory _name) { 
-    // check that What is not already in the mapping
+    // c
     require(ids[_name] == 0);
     _;
   }
 
+  /// @notice doesExist checks that a subject/"what" does already exist
   modifier doesExist (string memory _name) { 
-    // check that What is already in the mapping
     require(ids[_name] != 0);
     _;
   }
 
+  /// @notice meetsLengthLimits checks that an entry is not beyond the maxEntryBytes length
   modifier meetsLengthLimits (string memory _entry) { 
-    // check that an entry isn't too long
     require(bytes(_entry).length <= maxEntryBytes);
     _;
   }
 
+  /// @notice isOpen checks that a subject/"what" is open for a new entry proposal, i.e. not in voting
   modifier isOpen (string memory _name) { 
-    // check that What is in an open state
     require(whats[getWhatID(_name)].state == State.Open);
     _;
   }
 
+  /// @notice isVoting checks whether a subject/"what" is open for voting, i.e. has an active proposed entry
   modifier isVoting (string memory _name) { 
-    // check that What is a voting state
     require(whats[getWhatID(_name)].state == State.Voting);
     _;
   }
 
+  /// @notice isOwner checks whether a voter has accepted entries for the "what" and is thereby entitled to vote
+  /// @notice Do not confuse this contract's internal ownership isOwner with the imported OpenZeppelin onlyOwner
   modifier isOwner (string memory _name) { 
-    // check that a sender is an owner of the What, i.e. entitled to vote
     require(ownership[getWhatID(_name)][msg.sender] > 0);
     _;
   }
 
+  /// @notice hasNotAlreadyVoted checks that a voter has not already voted on an active proposed entry
   modifier hasNotAlreadyVoted (string memory _name) { 
-    // check that a voter has not already voted on an entry
     require(voted[getWhatID(_name)][proposedEntriesCount[getWhatID(_name)]][msg.sender] == false);
     _;
   }
 
+  /// @notice isExpired checks whether a vote has already been active for the minimum duration, i.e. whether the entry can be rejected
   modifier isExpired (string memory _name) { 
-    // check whether a vote has already been active for a day
     uint id = getWhatID(_name);
     require(block.timestamp >= proposedEntries[id][proposedEntriesCount[id]].proposedTimestamp + voteDuration);
     _;
   }
 
-  // **CONSTRUCTOR**
-
   constructor() Pausable() Ownable() {}
 
-  // **FUNCTIONS**
-
+  /// @notice createWhat creates a new subject and writes the first entry
+  /// @param _name the name of the new "what" subject. Must be new/unique
+  /// @param _entry the string content of the first entry. Must not be above length limit
+  /// @return returns true when successful
   function createWhat(string memory _name, string memory _entry) 
     public 
     whenNotPaused()
     doesNotExist(_name) 
+    meetsLengthLimits(_entry)
     returns (bool) 
     {
-    // 1. Create the What
+    // 1. Create the What and set its state to Open
     whats[whatCount+1].name = _name;
     whats[whatCount+1].state = State.Open;
     // 2. Write the entry and mark the ownership
@@ -185,9 +249,9 @@ contract WhatIs is Pausable, Ownable {
       proposer: msg.sender,
       proposedTimestamp: block.timestamp
     });
+    // 3. Advance the counters
     proposedEntriesCount[whatCount+1] = 1;
     acceptedEntriesCount[whatCount+1] = 1;
-    // 3. Advance the whatCount
     whatCount += 1;
     // 4. Emit the event
     emit LogWhatCreated(ids[_name],_name, _entry, msg.sender, block.timestamp);
@@ -195,6 +259,9 @@ contract WhatIs is Pausable, Ownable {
     return true;
     }
 
+  /// @notice getWhatID is a helper function to get the integer ID for a "what" given its string name
+  /// @param _name the string name of the "what" subject for which we want the integer ID
+  /// @return returns the integer ID for the "what"
   function getWhatID(string memory _name)
     public
     view 
@@ -204,6 +271,8 @@ contract WhatIs is Pausable, Ownable {
       return ids[_name];
     }
 
+  /// @notice getWhatCount is a helper function to get the total number of subjects created
+  /// @return returns the total number of subjects created
   function getWhatCount()
     public
     view
@@ -212,6 +281,10 @@ contract WhatIs is Pausable, Ownable {
       return whatCount;
     }
 
+  /// @notice proposeEntry proposes a new entry to an existing subject/"what"
+  /// @param _name the name of the "what"/subject. Must already exist
+  /// @param _entry the string content of the proposed entry. Must not be above length limit
+  /// @return returns true when successful
   function proposeEntry(string memory _name, string memory _entry)
     public
     whenNotPaused()
@@ -221,6 +294,7 @@ contract WhatIs is Pausable, Ownable {
     returns (bool)
     {
       uint id = getWhatID(_name);
+      // 1. Write the proposed entry
       proposedEntries[id][proposedEntriesCount[id]+1] = Entry({
         what: _name,
         content: _entry,
@@ -228,12 +302,22 @@ contract WhatIs is Pausable, Ownable {
         proposer: msg.sender,
         proposedTimestamp: block.timestamp
       });
+      // 2. Advance the counter
       proposedEntriesCount[id] += 1;
+      // 3. Transition the What's state from Open to Voting
       whats[id].state = State.Voting;
+      // 4. Emit the event
       emit LogEntryProposed(id,proposedEntriesCount[id], _name, _entry, msg.sender, block.timestamp);
       return true;
     }
 
+  /// @notice vote submits a vote in favor of a proposed entry
+  /// @notice You do not vote against a proposed entry. Not voting is a vote against
+  /// @notice The vote function also accepts the proposed entry if the vote is pivotal, i.e. crosses the threshold
+  /// @notice You don't have to specify the entry when you vote, as each subject/"what" has only one active proposed entry at a time
+  /// @notice Voters get one vote per entry they have had accepted to the "what". Calling vote once assigns all of a user's votes in favor of the proposed entry
+  /// @param _name the name of the "what"/subject. Must already exist and be in Voting state.
+  /// @return returns true when successful
   function vote(string memory _name)
     public
     whenNotPaused()
@@ -244,15 +328,17 @@ contract WhatIs is Pausable, Ownable {
     returns (bool)
     {
       uint id = getWhatID(_name);
+      // 1. Track that the user has voted and count the vote(s)
       voted[id][proposedEntriesCount[id]][msg.sender]=true;
       votes[id] += ownership[id][msg.sender];
-      // Check if the vote was pivotal
+      // 2. Check if the vote was pivotal, i.e. whether the proposed entry becomes accepted
       bool pivotal = false;
       if (votes[id] > acceptedEntriesCount[id]/2) {
         pivotal = true;
       }
+      // 3. Emit the LogVoted event
       emit LogVoted(ids[_name],proposedEntriesCount[id],_name, msg.sender, block.timestamp, pivotal);
-      // If that vote is pivotal, we terminate the vote and accept the entry
+      // 4. If the vote(s) is/are pivotal, terminate the vote and accept the entry
       if (pivotal == true) {
         // Accept the entry
         proposedEntries[id][proposedEntriesCount[id]].state = State.Accepted;
@@ -263,24 +349,21 @@ contract WhatIs is Pausable, Ownable {
         // Credit the proposer with an ownership token
         ownership[id][proposedEntries[id][proposedEntriesCount[id]].proposer] += 1;
         pivotal = true;
+        // Emit the LogEntryAcceptedEvent
         emit LogEntryAccepted(id,proposedEntriesCount[id],acceptedEntriesCount[id],
          _name, acceptedEntries[id][acceptedEntriesCount[id]].content, 
          acceptedEntries[id][acceptedEntriesCount[id]].proposer,
          (acceptedEntriesCount[id]-1)/2, votes[id], block.timestamp);
+        // Reset the votes to zero for the next proposed entry
         votes[id] = 0;
       }
       return true;
     }
 
-  function getCurrentTime() 
-    public
-    onlyOwner 
-    view
-    returns (uint256)
-    {
-      return block.timestamp;
-    }
-
+  /// @notice rejectEntry rejects a proposed entry if the vote threshold is not met and the minimum duration has elapsed
+  /// @notice Any user can reject an entry provided conditions are met
+  /// @param _name the name of the "what"/subject. Must already exist and be in Voting state.
+  /// @return returns true when successful
   function rejectEntry(string memory _name)
     public 
     whenNotPaused()
@@ -290,8 +373,11 @@ contract WhatIs is Pausable, Ownable {
     returns (bool)
     {
       uint id = getWhatID(_name);
+      // 1. Mark the entry as rejected
       proposedEntries[id][proposedEntriesCount[id]].state = State.Rejected;
+      // 2. Reopen the what
       whats[id].state = State.Open;
+      // 3. Emit the LogEntryRejected event
       emit LogEntryRejected(id,proposedEntriesCount[id],
          _name, proposedEntries[id][proposedEntriesCount[id]].content, 
           proposedEntries[id][proposedEntriesCount[id]].proposer,
@@ -299,49 +385,4 @@ contract WhatIs is Pausable, Ownable {
       votes[id] = 0;
       return true;
     }
-
-
-
-    // function deleteWhat(string memory _name) 
-    // public returns (bool) 
-    // {
-    // delete whats[_name];
-    // return true;
-    // }
-
-    // function checkWhat(string memory _name) 
-    // // 1. Check that What doesn't already exist
-    // // [TD] doesNotExist(what)
-    // public returns (bool) 
-    // {
-    // return true;
-    // }
-
-//  function fetchWhatByID(uint _id) public view  
-//     returns (string memory name, uint id, string memory content, State state, address creator, address lastContributor, bool exists) 
-//     { 
-//     name = whats[_id].name; 
-//     id = whats[_id].id; 
-//     content = whats[_id].content; 
-//     state = whats[_id].state; 
-//     creator = whats[_id].creator; 
-//     lastContributor = whats[_id].lastContributor; 
-//     exists = whats[_id].exists;
-//     // emit LogFetched(name,_id);
-//     return (name, id, content, state, creator, lastContributor, exists);
-//     }
-
-//  function fetchWhatByName(string memory _name) public view  
-//     returns (string memory name, uint id, string memory content, State state, address creator, address lastContributor, bool exists) 
-//     { 
-//     name = whats[_name].name; 
-//     id = whats[_name].id; 
-//     content = whats[_name].content; 
-//     state = whats[_name].state; 
-//     creator = whats[_name].creator; 
-//     lastContributor = whats[_name].lastContributor; 
-//     exists = whats[_name].exists;
-//     // emit LogFetched(name,_id);
-//     return (name, id, content, state, creator, lastContributor, exists);
-//     }
 }
