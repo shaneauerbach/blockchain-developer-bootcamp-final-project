@@ -1,8 +1,10 @@
 
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.4.21 <0.7.0;
+pragma solidity 0.8.0;
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 
-contract WhatIs {
+contract WhatIs is Pausable, Ownable {
 
   // **OBJECTS**
 
@@ -90,6 +92,17 @@ contract WhatIs {
     uint acceptedTimestamp
     );
 
+  event LogEntryRejected(
+    uint what_id, 
+    uint proposed_entry_id,
+    string name, 
+    string content,
+    address proposer,
+    uint votesRequired,
+    uint votesReceived,
+    uint rejectedTimestamp
+    );
+
   // **MODIFIERS**
   modifier doesNotExist (string memory _name) { 
     // check that What is not already in the mapping
@@ -136,26 +149,19 @@ contract WhatIs {
   modifier isExpired (string memory _name) { 
     // check whether a vote has already been active for a day
     uint id = getWhatID(_name);
-    require(now >= proposedEntries[id][proposedEntriesCount[id]].proposedTimestamp + voteDuration);
+    require(block.timestamp >= proposedEntries[id][proposedEntriesCount[id]].proposedTimestamp + voteDuration);
     _;
   }
 
   // **CONSTRUCTOR**
 
-  // Define the owner
-  address public owner;
-
-  constructor() public {
-    // 1. Set the owner to the transaction sender
-    owner = msg.sender;
-    // 2. Initialize the sku count to 0.
-    whatCount = 0;
-  }
+  constructor() Pausable() Ownable() {}
 
   // **FUNCTIONS**
 
   function createWhat(string memory _name, string memory _entry) 
     public 
+    whenNotPaused()
     doesNotExist(_name) 
     returns (bool) 
     {
@@ -170,27 +176,28 @@ contract WhatIs {
       content: _entry,
       state: State.Accepted,
       proposer: msg.sender,
-      proposedTimestamp: now
+      proposedTimestamp: block.timestamp
     });
     acceptedEntries[whatCount+1][1] = Entry({
       what: _name,
       content: _entry,
       state: State.Accepted,
       proposer: msg.sender,
-      proposedTimestamp: now
+      proposedTimestamp: block.timestamp
     });
     proposedEntriesCount[whatCount+1] = 1;
     acceptedEntriesCount[whatCount+1] = 1;
     // 3. Advance the whatCount
     whatCount += 1;
     // 4. Emit the event
-    emit LogWhatCreated(ids[_name],_name, _entry, msg.sender, now);
+    emit LogWhatCreated(ids[_name],_name, _entry, msg.sender, block.timestamp);
     // 5. Return true
     return true;
     }
 
   function getWhatID(string memory _name)
-    public 
+    public
+    view 
     doesExist(_name)
     returns (uint)
     {
@@ -198,7 +205,8 @@ contract WhatIs {
     }
 
   function getWhatCount()
-    public 
+    public
+    view
     returns (uint)
     {
       return whatCount;
@@ -206,6 +214,7 @@ contract WhatIs {
 
   function proposeEntry(string memory _name, string memory _entry)
     public
+    whenNotPaused()
     doesExist(_name)
     isOpen(_name)
     meetsLengthLimits(_entry)
@@ -217,16 +226,17 @@ contract WhatIs {
         content: _entry,
         state: State.Proposed,
         proposer: msg.sender,
-        proposedTimestamp: now
+        proposedTimestamp: block.timestamp
       });
       proposedEntriesCount[id] += 1;
       whats[id].state = State.Voting;
-      emit LogEntryProposed(id,proposedEntriesCount[id], _name, _entry, msg.sender, now);
+      emit LogEntryProposed(id,proposedEntriesCount[id], _name, _entry, msg.sender, block.timestamp);
       return true;
     }
 
   function vote(string memory _name)
     public
+    whenNotPaused()
     doesExist(_name)
     isVoting(_name)
     isOwner(_name)
@@ -241,7 +251,7 @@ contract WhatIs {
       if (votes[id] > acceptedEntriesCount[id]/2) {
         pivotal = true;
       }
-      emit LogVoted(ids[_name],proposedEntriesCount[id],_name, msg.sender, now, pivotal);
+      emit LogVoted(ids[_name],proposedEntriesCount[id],_name, msg.sender, block.timestamp, pivotal);
       // If that vote is pivotal, we terminate the vote and accept the entry
       if (pivotal == true) {
         // Accept the entry
@@ -256,21 +266,24 @@ contract WhatIs {
         emit LogEntryAccepted(id,proposedEntriesCount[id],acceptedEntriesCount[id],
          _name, acceptedEntries[id][acceptedEntriesCount[id]].content, 
          acceptedEntries[id][acceptedEntriesCount[id]].proposer,
-         (acceptedEntriesCount[id]-1)/2, votes[id], now);
+         (acceptedEntriesCount[id]-1)/2, votes[id], block.timestamp);
         votes[id] = 0;
       }
       return true;
     }
 
   function getCurrentTime() 
-    public 
+    public
+    onlyOwner 
+    view
     returns (uint256)
     {
-      return now;
+      return block.timestamp;
     }
 
   function rejectEntry(string memory _name)
     public 
+    whenNotPaused()
     isExpired(_name)
     doesExist(_name)
     isVoting(_name)
@@ -279,6 +292,11 @@ contract WhatIs {
       uint id = getWhatID(_name);
       proposedEntries[id][proposedEntriesCount[id]].state = State.Rejected;
       whats[id].state = State.Open;
+      emit LogEntryRejected(id,proposedEntriesCount[id],
+         _name, proposedEntries[id][proposedEntriesCount[id]].content, 
+          proposedEntries[id][proposedEntriesCount[id]].proposer,
+         (acceptedEntriesCount[id]-1)/2, votes[id], block.timestamp);
+      votes[id] = 0;
       return true;
     }
 

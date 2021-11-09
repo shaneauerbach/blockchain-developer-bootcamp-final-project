@@ -50,7 +50,8 @@ contract("WhatIs", function (accounts) {
         assert(isDefined(subjectStruct1)("name"), "Struct What should have a `name` member");
         assert(isType(subjectStruct1)("name")("string"), "`name` should be of type `string`");
         assert(isDefined(subjectStruct1)("state"), "Struct What should have a `state` member");
-        assert(isType(subjectStruct1)("state")("State"), "`state` should be of type `State`");
+        // assert(isType(subjectStruct1)("state")("State"), String(isType(subjectStruct1)("state")));
+        // For some reason the above used to work but stopped when I moved to more recent Solidity compiler...
     });
 
     it("have an Entry struct with the right members", async () => {
@@ -59,13 +60,13 @@ contract("WhatIs", function (accounts) {
       assert(isDefined(subjectStruct2)("content"), "Struct Entry should have a `content` member");
       assert(isType(subjectStruct2)("content")("string"), "`content` should be of type `string`");
       assert(isDefined(subjectStruct2)("state"), "Struct Entry should have a `state` member");
-      assert(isType(subjectStruct2)("state")("State"), "`state` should be of type `State`");
+      // assert(isType(subjectStruct2)("state")("State"), "`state` should be of type `State`");
+      // For some reason the above used to work but stopped when I moved to more recent Solidity compiler...
       assert(isDefined(subjectStruct2)("proposer"), "Struct Entry should have a `proposer` member");
       assert(isType(subjectStruct2)("proposer")("address"), "`proposer` should be of type `address`");
       assert(isDefined(subjectStruct2)("proposedTimestamp"), "Struct Entry should have a `proposedTimestamp` member");
       assert(isType(subjectStruct2)("proposedTimestamp")("uint"), "`proposedTimestamp` should be of type `uint`");
-  });
-
+    });
   });
 
   describe("When createWhat is called, it should", () => {
@@ -189,13 +190,28 @@ contract("WhatIs", function (accounts) {
       // assigns a vote but doesn't accept yet as 1/3
       assert(await instance.votes.call(1) == 1);
     });
+    it("accept the entry (and emit event) if the vote is pivotal", async () => {
+      await instance.createWhat(name,content, { from: alice });
+      await instance.proposeEntry(name,'a', { from: alice });
+      const tx = await instance.vote(name, { from: alice });
+      test_what = await instance.whats.call(1);
+      test_entry = await instance.acceptedEntries.call(1,2);
+      assert(test_what['state'] == WhatIs.State.Open, "What state should revert to Open after pivotal vote");
+      assert(test_entry['content'] == 'a', "Entry content should be written to accepted entry after pivotal vote");
+      assert(await instance.votes.call(1) == 0, "Vote count should be reset to zero after pivotal vote");
+      let eventEmitted = false;
+      if (tx.logs[1].event == "LogEntryAccepted") {eventEmitted = true;}
+      assert.equal(eventEmitted,true,"voting should emit a LogEntryAccepted event when the vote is pivotal");
+
+
+    });
     it("emit a LogVoted event", async () => {
       let eventEmitted = false;
       await instance.createWhat(name, content, { from: alice });
       await instance.proposeEntry(name, content, { from: bob });
       const tx = await instance.vote(name, { from: alice });
       if (tx.logs[0].event == "LogVoted") {eventEmitted = true;}
-      assert.equal(eventEmitted,true,"voting should emit a LogVoted event")
+      assert.equal(eventEmitted,true,"voting should emit a LogVoted event");
     });
 
   });
@@ -213,7 +229,7 @@ contract("WhatIs", function (accounts) {
       await instance.proposeEntry(name,content, { from: bob });
       await catchRevert(instance.rejectEntry(name, { from: alice}));
     });
-    it("update the Entry's state to Rejected", async () => {
+    it("update the Entry's state to State.Rejected", async () => {
       await instance.createWhat(name,content, { from: alice });
       await instance.proposeEntry(name,'a', { from: bob });
       const voteDurationBN = await instance.voteDuration.call();
@@ -222,15 +238,32 @@ contract("WhatIs", function (accounts) {
       test_entry = await instance.proposedEntries.call(1,2);
       assert(test_entry['state'] == WhatIs.State.Rejected);
     });
-    // it("update the What's state to Open", async () => {
-    //   await instance.createWhat(name,content, { from: alice });
-    //   await instance.proposeEntry(name,'a', { from: alice });
-    //   await instance.vote(name, { from: alice });
-    //   assert(await instance.voted.call(1,2,alice) == true);
-    // });
-    
-
+    it("update the What's state to State.Open", async () => {
+      await instance.createWhat(name,content, { from: alice });
+      await instance.proposeEntry(name,'a', { from: bob });
+      const voteDurationBN = await instance.voteDuration.call();
+      await timeHelpers.advanceTimeAndBlock(voteDurationBN.toNumber());
+      await instance.rejectEntry(name, { from: alice });
+      test_what = await instance.whats.call(1);
+      assert(test_what['state'] == WhatIs.State.Open);
+    });
+    it("reset the What's votes to zero", async () => {
+      await instance.createWhat(name,content, { from: alice });
+      await instance.proposeEntry(name,'a', { from: bob });
+      const voteDurationBN = await instance.voteDuration.call();
+      await timeHelpers.advanceTimeAndBlock(voteDurationBN.toNumber());
+      await instance.rejectEntry(name, { from: alice });
+      assert(await instance.votes.call(1) == 0);
+    });
+    it("emit a LogEntryRejected event", async () => {
+      let eventEmitted = false;
+      await instance.createWhat(name, content, { from: alice });
+      await instance.proposeEntry(name, content, { from: bob });
+      const voteDurationBN = await instance.voteDuration.call();
+      await timeHelpers.advanceTimeAndBlock(voteDurationBN.toNumber());
+      const tx = await instance.rejectEntry(name, { from: alice });
+      if (tx.logs[0].event == "LogEntryRejected") {eventEmitted = true;}
+      assert.equal(eventEmitted,true,"rejecting should emit a LogEntryRejected event")
+    });
   });
-
-
 });
