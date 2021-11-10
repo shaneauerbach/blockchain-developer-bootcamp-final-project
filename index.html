@@ -8,19 +8,68 @@
     <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
 </head>
 <body>
-    <h1>This is my Dapp! How cool is this?</h1>
-
-    <!-- 1. detect MetaMask is / is not installed -->
+    <h1>WhatIs</h1>
+    <p>This is a simple frontend for a smart contract that I (Shane Auerbach) wrote for the ConSensys Smart Contract Developer Bootcamp final project.
+    <br>For details on the contract, see https://github.com/shaneauerbach/blockchain-developer-bootcamp-final-project.
+    </p>
+    <hr>
+    <h2>1. Connect to Metamask</h2>
     <div id="mm-detected"></div>
-    <!-- 2. allow the user to get access to MetaMask -->
+    <br>
     <button id="mm-connect">Connect to MetaMask</button>
+    <br>
+    <br>
     <div id="mm-current-account"></div>
-    <!-- 3. allow the user to send a transaction / update contract state (i.e. send a transaction to a contract) -->
+    <br>
+    <hr>
+    <h2>2. Read current contract state summary</h2>
+    <button id="wi-summary">Get summary of contract state</button>
+    <br>
+    <br>
+    <div id="wi-whatcount"></div>
+    <br>
+    <div id="wi-firstwhatcreated"></div>
+    <div id="wi-firstwhatfirstentrycreated"></div>
+    <div id="wi-firstwhatlastentrycreated"></div>
+    <br>
+    <div id="wi-lastwhatcreated"></div>
+    <div id="wi-lastwhatfirstentrycreated"></div>
+    <div id="wi-lastwhatlastentrycreated"></div>
+    <hr>
+    <h2>3. Read summary of state for a specific What and access entries by ID</h2>
     <input 
-        id="ss-input-box" 
+        id="wi-whatsummarybox" 
+        type="string"
+        placeholder="What"/>
+    <button id="wi-whatsummarybutton">Get summary</button>
+    <br>
+    <div id="wi-whatcreator"></div>
+    <div id="wi-whatcreatedtimestamp"></div>
+    <div id="wi-whatfirstentry"></div>
+    <div id="wi-whatentriesacceptedcount"></div>
+    <div id="wi-whatmostrecentaccepted"></div>
+    <div id="wi-whatentriesproposedcount"></div>
+    <div id="wi-whatmostrecentproposed"></div>
+    <div id="wi-whatstate"></div>
+    <br>
+    <input 
+        id="wi-whatgetentrybox" 
         type="number"
-        placeholder="Provide input"/>
-    <button id="ss-input-button">Submit Value</button>
+        placeholder="1"/>
+    <button id="wi-whatsgetentrybutton">Get entry</button>
+
+
+
+    <!-- <h1>3. Interact with the contract</h1>
+    <input 
+        id="wi-createWhat-name-box" 
+        type="string"
+        placeholder="What"/>
+    <input 
+        id="wi-createWhat-entry-box" 
+        type="string"
+        placeholder="Entry"/>
+    <button id="wi-createWhat-button">Create</button> -->
 
     <!-- 4. allow the user to read state from a contract -->
 
