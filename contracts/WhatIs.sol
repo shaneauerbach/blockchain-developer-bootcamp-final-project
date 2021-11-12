@@ -44,10 +44,10 @@ contract WhatIs is Pausable, Ownable {
   enum State{Open, Voting, Proposed, Accepted, Rejected}
 
   /// @notice maxEntryBytes defines the max length of an Entry
-  uint public maxEntryBytes = 10;
+  uint public maxEntryBytes = 100;
 
   /// @notice voteDuration defines the minimum seconds a vote must remain open before the entry can be rejected
-  uint public voteDuration = 86400;
+  uint public voteDuration = 1; // Would be 86400 in a real deployment, but set to 1 for easy frontend testing
 
   /// @notice whats and ids are a bidirectional mapping between subjects "whats" and integer ids
   mapping (uint => What) public whats;
