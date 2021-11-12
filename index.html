@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Simple Dapp</title>
+    <title>WhatIs</title>
     <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
 </head>
 <body>
     <h1>WhatIs</h1>
-    <p>This is a simple frontend for a smart contract that I (Shane Auerbach) wrote for the ConSensys Smart Contract Developer Bootcamp final project.
+    <p>This is a simple frontend for a smart contract that I wrote for the ConSensys Smart Contract Developer Bootcamp final project.
     <br>For details on the contract, see https://github.com/shaneauerbach/blockchain-developer-bootcamp-final-project.
     </p>
     <hr>
@@ -20,7 +20,7 @@
     <br>
     <br>
     <div id="mm-current-account"></div>
-    <br>
+    <p>Toggle your MetaMask to Rinkeby for the rest to work. You'll also need a tiny amount of Rinkeby test eth for transactions.</p>
     <hr>
     <h2>2. Read current contract state summary</h2>
     <button id="wi-summary">Get summary of contract state</button>
@@ -36,43 +36,92 @@
     <div id="wi-lastwhatfirstentrycreated"></div>
     <div id="wi-lastwhatlastentrycreated"></div>
     <hr>
-    <h2>3. Read summary of state for a specific What and access entries by ID</h2>
+    <h2>3. Read summary of state for a specific What, access entries by ID, and vote</h2>
     <input 
         id="wi-whatsummarybox" 
         type="string"
         placeholder="What"/>
     <button id="wi-whatsummarybutton">Get summary</button>
     <br>
+    <br>
+    <div id="wi-whatname"></div>
+    <div id="wi-whatid"></div>
     <div id="wi-whatcreator"></div>
     <div id="wi-whatcreatedtimestamp"></div>
     <div id="wi-whatfirstentry"></div>
-    <div id="wi-whatentriesacceptedcount"></div>
-    <div id="wi-whatmostrecentaccepted"></div>
     <div id="wi-whatentriesproposedcount"></div>
-    <div id="wi-whatmostrecentproposed"></div>
+    <div id="wi-whatentriesacceptedcount"></div>
+    <br>
     <div id="wi-whatstate"></div>
+    <div id="wi-whatmostrecentproposed"></div>
     <br>
     <input 
-        id="wi-whatgetentrybox" 
+        id="wi-getacceptedentrybox" 
         type="number"
-        placeholder="1"/>
-    <button id="wi-whatsgetentrybutton">Get entry</button>
-
-
-
-    <!-- <h1>3. Interact with the contract</h1>
+        placeholder=1>
+    <button id="wi-getacceptedentrybutton">Get entry by accepted entry ID</button>
+    <div id="wi-getacceptedentry-content"></div>
+    <div id="wi-getacceptedentry-state"></div>
+    <div id="wi-getacceptedentry-proposer"></div>
+    <div id="wi-getacceptedentry-timestamp"></div>
+    <br>
+    <br>
     <input 
-        id="wi-createWhat-name-box" 
-        type="string"
-        placeholder="What"/>
+    id="wi-getproposedentrybox" 
+    type="number"
+    placeholder=1>
+    <button id="wi-getproposedentrybutton">Get entry by proposed entry ID</button>
+    <div id="wi-getproposedentry-content"></div>
+    <div id="wi-getproposedentry-state"></div>
+    <div id="wi-getproposedentry-proposer"></div>
+    <div id="wi-getproposedentry-timestamp"></div>
+    <br>
+    <br>
+    <p>When you vote, it's always for the active proposed entry, i.e. the one with proposed entry ID equal to "Entries proposed" in the summary.</p>
+    <button id="wi-vote">Vote for entry</button>
+    <br>
+    <br>
+    <div id="wi-voteresult"></div>
+
+    <p>To open up a What for a new entry, first you must reject (or accept through voting) the current entry.</p>
+    <button id="wi-reject">Reject active proposed entry</button>
+    <br>
+    <br>
+    <div id="wi-rejectresult"></div>
+
+    <hr>
+    <h2>4. Create a What</h2>
+    <p>If you enter a new name for a what, it should allow you to complete a 0 eth transaction in MetaMask where you just pay ~0.001 gas.</p>
+    <p>If MetaMask suggests there is a Transaction Error, your entry may be over the byte limit.</p>
+    <p>After hitting Create, wait ~20 seconds for a transaction hash to be displayed.</p>
     <input 
-        id="wi-createWhat-entry-box" 
-        type="string"
-        placeholder="Entry"/>
-    <button id="wi-createWhat-button">Create</button> -->
-
-    <!-- 4. allow the user to read state from a contract -->
-
+    id="wi-createWhat-name-box" 
+    type="string"
+    placeholder="What"/>
+    <input 
+    id="wi-createWhat-entry-box" 
+    type="string"
+    placeholder="Entry"/>
+    <button id="wi-createWhat-button">Create</button>
+    <br>
+    <br>
+    <div id="wi-createwhatresult"></div>
+    <hr>
+    <h2>5. Propose an entry to a What</h2>
+    <p>Same instructions from (4) above, except this proposes a new entry to an existing What.</p>
+    <input 
+    id="wi-proposeentry-name-box" 
+    type="string"
+    placeholder="What"/>
+    <input 
+    id="wi-proposeentry-entry-box" 
+    type="string"
+    placeholder="Entry"/>
+    <button id="wi-proposeentry-button">Propose</button>
+    <br>
+    <br>
+    <div id="wi-proposeentryresult"></div>
+    <hr>
     <script src="dapp.js"></script>
 </body>
 </html>
