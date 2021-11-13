@@ -255,12 +255,3 @@ wiReject.onclick = async () => {
     } 
     
 }
-
-
-
-// const whatCount = document.getElementById('whatCount');
-// const whatCountValue = whatIs.methods.whatCount().call();
-// whatCount.innerHTML = "Here's the whatCount:" + whatCountValue
-
-// const wiCreateWhat = document.getElementById('wi-createWhat-button');
-
