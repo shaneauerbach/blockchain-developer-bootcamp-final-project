@@ -30,6 +30,6 @@ A few requirements for the final project submission:
    - Dependencies: You'll need `npm install @openzeppelin/contracts` and `npm install dotenv` if you don't already have them. Assuming you already have npm and the Truffle Suite, including Ganache, set up. You'll also need a `.env` file that defines `MNEMONIC` and `INFURA_URL` for deployment. I also define `ETHERSCAN_API_KEY` in the `truffle-config.js` so that I can use the [truffle-plugin-verify](https://github.com/rkalis/truffle-plugin-verify), but you can comment out that line if you don't want to use it.
    - Access: Just go to the frontend and have play. It's all ready to go.
    - To run the unit tests, you should just be able to call `truffle test` (or `truffle develop` then `test`) from inside the repo. I haven't actually defined the development environment in `truffle-config.js` so presumably it just uses whatever the Ganache default is for the port?
-10. Here's a screencast of me walking through the project. **[TO BE ADDED]**
+10. Here's a screencast of me walking through the project: [https://www.youtube.com/watch?v=ZanGCvt9UlU](https://www.youtube.com/watch?v=ZanGCvt9UlU)
 
 

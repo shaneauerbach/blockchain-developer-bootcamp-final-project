@@ -48,7 +48,7 @@ wiSummary.onclick = async () => {
 	let firstWhatEntryCount = await whatIs.methods.acceptedEntriesCount(1).call();
 	let firstWhatLastEntryCreated = await whatIs.methods.acceptedEntries(1,firstWhatEntryCount).call();
 	document.getElementById('wi-firstwhatlastentrycreated').innerHTML = 
-		"The most recent entry accepted for it was was: " + firstWhatLastEntryCreated['content'];
+		"The most recent entry accepted for it was: " + firstWhatLastEntryCreated['content'];
 
     let lastWhatCreated = await whatIs.methods.whats(whatCount).call();
     document.getElementById('wi-lastwhatcreated').innerHTML =
